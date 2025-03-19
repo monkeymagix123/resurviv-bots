@@ -69,7 +69,7 @@ export const allowedGuns = [
     // "bugle",
 
     // goat
-    "pkp",
-    "awc",
-    "usas",
+    // "pkp",
+    // "awc",
+    // "usas",
 ];
