@@ -3965,7 +3965,7 @@ export class Bot extends Player {
             )
             .filter(
                 (obj): obj is Player =>
-                    obj.__type == ObjectType.Player,
+                    obj.__type == ObjectType.Player && !obj.dead,
             );
 
         let closestPlayer: Player | undefined;
@@ -4017,7 +4017,7 @@ export class Bot extends Player {
                 this.moveLeft = !this.moveLeft;
                 this.moveRight = !this.moveRight;
             }
-        } else if (closestPlayer != undefined && closestDist > GameConfig.player.reviveRange) {
+        } else if (closestPlayer != undefined) {
             this.shootHold = true;
             let r1 = Math.random();
             let r2 = Math.random();
