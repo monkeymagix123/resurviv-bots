@@ -10,34 +10,16 @@ const serverDataConfig = {
     local: {},
     na: {
         gameServer: {
-            apiServerUrl: "http://resurviv.biz",
+            apiServerUrl: "https://vm-test.tailf587b3.ts.net/api",
         },
         regions: {
             na: {
-                https: false,
-                address: "resurviv.biz:8001",
+                https: true,
+                address: "vm-game.tailf587b3.ts.net",
                 l10n: "index-north-america",
-            },
-            eu: {
-                https: false,
-                address: "217.160.224.171:8001",
-                l10n: "index-europe",
-            },
+            }
         },
         thisRegion: "na",
-    },
-    eu: {
-        gameServer: {
-            apiServerUrl: "http://217.160.224.171",
-        },
-        regions: {
-            eu: {
-                https: false,
-                address: "217.160.224.171:8001",
-                l10n: "index-europe",
-            },
-        },
-        thisRegion: "eu",
     },
 };
 
@@ -70,8 +52,8 @@ export const CustomConfig: DeepPartial<ConfigType> = {
             damageTickRate: 1,
         },
         player: {
-            // baseSwitchDelay: 0.05,
-            baseSwitchDelay: 0.00,
+            baseSwitchDelay: 0.05,
+            // baseSwitchDelay: 0.00,
             defaultItems: {
                 backpack: "backpack03",
                 helmet: "helmet03",
