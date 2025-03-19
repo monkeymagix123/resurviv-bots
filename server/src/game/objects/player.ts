@@ -127,6 +127,9 @@ export class PlayerBarn {
         const pos: Vec2 = this.game.map.getSpawnPos(group, team);
 
         const player = new Player(this.game, pos, socketId, joinMsg);
+        // bot
+        const pos2: Vec2 = this.game.map.getSpawnPos(group, team);
+        const bot = new Bot(this.game, pos, socketId, joinMsg);
 
         logIp(player.name, ip);
 
@@ -155,6 +158,12 @@ export class PlayerBarn {
         this.game.objectRegister.register(player);
         this.players.push(player);
         this.livingPlayers.push(player);
+        // bot
+        this.newPlayers.push(bot);
+        this.game.objectRegister.register(bot);
+        this.players.push(bot);
+        this.livingPlayers.push(bot);
+        // end
         if (!this.game.modeManager.isSolo) {
             this.livingPlayers.sort((a, b) => a.teamId - b.teamId);
         }
@@ -175,7 +184,18 @@ export class PlayerBarn {
 
     update(dt: number) {
         for (let i = 0; i < this.players.length; i++) {
-            this.players[i].update(dt);
+            // this.players[i].update(dt);
+            // if (this.players[i] instanceof Bot) {
+            //     (this.players[i] as Bot).move();
+            // }
+            if (this.players[i] instanceof Bot) {
+                let b = this.players[i] as Bot;
+                b.update(dt);
+                // b.move();
+                b.moveLeft = true;
+            } else {
+                this.players[i].update(dt);
+            }
         }
 
         // update scheduled roles
@@ -3839,6 +3859,7 @@ export class Player extends BaseGameObject {
 export class Bot extends Player {
     // test
     constructor(game: Game, pos: Vec2, socketId: string, joinMsg: net.JoinMsg) {
+        // super(game, pos, socketId, joinMsg);
         super(game, pos, socketId, joinMsg);
 
         // prob use same joinMsg?
@@ -3847,6 +3868,9 @@ export class Bot extends Player {
         this.isMobile = false;
         // change default outfit
         this.setOutfit("outfitNoir");
+
+        this.ack = 100;
+        this.toMouseDir = this.posOld; // ???
 
         const loadout = this.loadout;
 
@@ -3860,7 +3884,7 @@ export class Bot extends Player {
         // set random weapons
         // currently mosin + spas12
         const slot1 = GameConfig.WeaponSlot.Primary;
-        this.weapons[slot1].type = "mosin";
+        this.weapons[slot1].type = "hk416";
         const gunDef1 = GameObjectDefs[this.weapons[slot1].type] as GunDef;
         this.weapons[slot1].ammo = gunDef1.maxClip;
 
@@ -3868,752 +3892,80 @@ export class Bot extends Player {
         this.weapons[slot2].type = "spas12";
         const gunDef2 = GameObjectDefs[this.weapons[slot2].type] as GunDef;
         this.weapons[slot2].ammo = gunDef2.maxClip;
+
+        // copied
+        this.shootHold = true; // test?
+        this.shootStart = true;
+        this.actionDirty = true;
+        this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary); // switch to main
+        this.toMouseLen = 50; //????
     }
 
-    update(dt: number): void {
-        if (this.dead) return;
-        this.timeAlive += dt;
+    // new one
+    move(): void {
+        // stuff
+        // let hoh = new net.InputMsg();
+        // hoh.moveLeft = true;
+        
+        // this.handleInput(hoh);
+        // this.moveLeft = true;
 
-        if (this.game.map.factionMode) {
-            this.timeUntilHidden -= dt;
-        }
+        // if (this.shootHold = false) {
+        //     this.shootHold = true;
+        // }
+        // this.shootHold = true;
+        // this.moveLeft = true;
+        // this.shootStart = !this.shootStart;
 
-        //
-        // Boost logic
-        //
-        if (this.boost > 0 && !this.hasPerk("leadership")) {
-            this.boost -= 0.375 * dt;
-        }
-        if (this.boost > 0 && this.boost <= 25) this.health += 0.5 * dt;
-        else if (this.boost > 25 && this.boost <= 50) this.health += 1.25 * dt;
-        else if (this.boost > 50 && this.boost <= 87.5) this.health += 1.5 * dt;
-        else if (this.boost > 87.5 && this.boost <= 100) this.health += 1.75 * dt;
+        // yay moves towards closest!
 
-        //
-        // Action logic
-        //
-        if (
-            this.game.modeManager.isReviving(this) ||
-            this.game.modeManager.isBeingRevived(this)
-        ) {
-            if (
-                this.playerBeingRevived &&
-                v2.distance(this.pos, this.playerBeingRevived.pos) >
-                    GameConfig.player.reviveRange
-            ) {
-                this.cancelAction();
-            }
-        }
-
-        // Take bleeding damage
-        this.bleedTicker -= dt;
-        if (
-            ((this.downed && this.actionType == GameConfig.Action.None) ||
-                this.hasPerk("trick_drain")) &&
-            this.bleedTicker < 0
-        ) {
-            const hasDrain = this.hasPerk("trick_drain");
-            this.bleedTicker = hasDrain
-                ? GameConfig.player.bleedTickRate * 3
-                : GameConfig.player.bleedTickRate;
-
-            const mapConfig = this.game.map.mapDef.gameConfig;
-
-            const bleedDamageMult = mapConfig.bleedDamageMult;
-
-            const multiplier =
-                bleedDamageMult != 1 ? this.downedCount * bleedDamageMult : 1;
-
-            let damage = hasDrain ? 1 : mapConfig.bleedDamage * multiplier;
-            this.damage({
-                amount: damage,
-                damageType: GameConfig.DamageType.Bleeding,
-                dir: this.dir,
-            });
-        }
-
-        this.chattyTicker -= dt;
-
-        if (this.hasPerk("trick_chatty") && this.chattyTicker < 0) {
-            this.chattyTicker = util.random(5, 15);
-
-            const emotes = Object.keys(EmotesDefs);
-
-            this.game.playerBarn.addEmote(
-                this.__id,
-                this.pos,
-                emotes[Math.floor(Math.random() * emotes.length)],
-                false,
-            );
-        }
-
-        if (this.game.gas.doDamage && this.game.gas.isInGas(this.pos)) {
-            this.damage({
-                amount: this.game.gas.damage,
-                damageType: GameConfig.DamageType.Gas,
-                dir: this.dir,
-            });
-        }
-
-        if (this.reloadAgain) {
-            this.reloadAgain = false;
-            this.weaponManager.tryReload();
-        }
-
-        // handle heal and boost actions
-
-        if (this.actionType !== GameConfig.Action.None) {
-            this.action.time += dt;
-            this.action.time = math.clamp(
-                this.action.time,
-                0,
-                net.Constants.ActionMaxDuration,
+        const nearbyEnemy = this.game.grid
+            .intersectCollider(
+                // collider.createCircle(this.pos, GameConfig.player.reviveRange),
+                collider.createCircle(this.pos, 10000),
+            )
+            .filter(
+                (obj): obj is Player =>
+                    obj.__type == ObjectType.Player,
             );
 
-            if (this.action.time >= this.action.duration) {
-                if (this.actionType === GameConfig.Action.UseItem) {
-                    const itemDef = GameObjectDefs[this.actionItem] as HealDef | BoostDef;
-                    if ("heal" in itemDef) {
-                        this.applyActionFunc((target: Player) => {
-                            target.health += itemDef.heal;
-                        });
-                    }
-                    if ("boost" in itemDef) {
-                        this.applyActionFunc((target: Player) => {
-                            target.boost += itemDef.boost;
-                        });
-                    }
-                    this.inventory[this.actionItem]--;
-                    this.inventoryDirty = true;
-                } else if (this.isReloading()) {
-                    this.weaponManager.reload();
-                } else if (
-                    this.actionType === GameConfig.Action.Revive &&
-                    this.playerBeingRevived
-                ) {
-                    this.applyActionFunc((target: Player) => {
-                        if (!target.downed) return;
-                        target.downed = false;
-                        target.health = GameConfig.player.reviveHealth;
-                        if (target.hasPerk("leadership")) target.boost = 100;
-                        target.setDirty();
-                        target.setGroupStatuses();
-                        this.game.pluginManager.emit("playerRevived", target);
-                    });
-                }
-
-                this.cancelAction();
-
-                if (
-                    (this.curWeapIdx == GameConfig.WeaponSlot.Primary ||
-                        this.curWeapIdx == GameConfig.WeaponSlot.Secondary) &&
-                    this.weapons[this.curWeapIdx].ammo == 0
-                ) {
-                    this.weaponManager.tryReload();
-                }
+        let closestPlayer: Player | undefined;
+        let closestDist = Number.MAX_VALUE;
+        for (const p of nearbyEnemy) {
+            if (!util.sameLayer(this.layer, p.layer)) {
+                continue;
+            }
+            const dist = v2.distance(this.pos, p.pos);
+            // if (dist <= GameConfig.player.reviveRange && dist < closestDist) {
+            if (dist < closestDist && p != this) {
+                closestPlayer = p;
+                closestDist = dist;
             }
         }
 
-        //
-        // Animation logic
-        //
-        if (this.animType !== GameConfig.Anim.None) {
-            this._animTicker -= dt;
-
-            if (this._animTicker <= 0) {
-                this.animType = GameConfig.Anim.None;
-                this._animTicker = 0;
-                this.animSeq++;
-                this.setDirty();
-                this._animCb?.();
-            }
-        }
-
-        //
-        // Projectile slowdown logic
-        //
-        if (this.frozen) {
-            this.frozenTicker -= dt;
-
-            if (this.frozenTicker <= 0) {
-                this.frozenTicker = 0;
-                this.frozen = false;
-                this.setDirty();
-            }
-        }
-
-        //
-        // Haste logic
-        //
-        if (this.hasteType != GameConfig.HasteType.None) {
-            this._hasteTicker -= dt;
-
-            if (this._hasteTicker <= 0) {
-                this.hasteType = GameConfig.HasteType.None;
-                this._hasteTicker = 0;
-                this.hasteSeq++;
-                this.setDirty();
-            }
-        }
-
-        //
-        // Last breath logic
-        //
-        if (this.lastBreathActive) {
-            this._lastBreathTicker -= dt;
-
-            if (this._lastBreathTicker <= 0) {
-                this.lastBreathActive = false;
-                this._lastBreathTicker = 0;
-
-                this.recalculateScale();
-            }
-        }
-
-        //
-        // Bugler logic
-        //
-        if (this.bugleTickerActive) {
-            this._bugleTicker -= dt;
-
-            if (this._bugleTicker <= 0) {
-                this.bugleTickerActive = false;
-                this._bugleTicker = 0;
-
-                const bugle = this.weapons.find((w) => w.type == "bugle");
-                if (bugle) {
-                    bugle.ammo++;
-                    if (
-                        bugle.ammo <
-                        this.weaponManager.getTrueAmmoStats(
-                            GameObjectDefs["bugle"] as GunDef,
-                        ).trueMaxClip
-                    ) {
-                        this.bugleTickerActive = true;
-                        this._bugleTicker = 8;
-                    }
-                }
-                this.weapsDirty = true;
-            }
-        }
-
-        if (this.game.isTeamMode || this.game.map.factionMode) {
-            this.playerStatusTicker += dt;
-            for (const spectator of this.spectators) {
-                spectator.playerStatusTicker += dt;
-            }
-        }
-
-        //
-        // Calculate new speed, position and check for collision with obstacles
-        //
-        const movement = v2.create(0, 0);
-
-        if (this.touchMoveActive && this.touchMoveLen) {
-            movement.x = this.touchMoveDir.x;
-            movement.y = this.touchMoveDir.y;
-        } else {
-            if (this.moveUp) movement.y++;
-            if (this.moveDown) movement.y--;
-            if (this.moveLeft) movement.x--;
-            if (this.moveRight) movement.x++;
-
-            if (movement.x * movement.y !== 0) {
-                // If the product is non-zero, then both of the components must be non-zero
-                movement.x *= Math.SQRT1_2;
-                movement.y *= Math.SQRT1_2;
-            }
-        }
-
-        this.posOld = v2.copy(this.pos);
-
-        let steps: number;
-        if (movement.x !== 0 || movement.y !== 0) {
-            this.recalculateSpeed();
-            steps = Math.round(math.max(this.speed * dt + 5, 5));
-        } else {
-            this.speed = 0;
-            steps = 1;
-        }
-        this.moveVel = v2.mul(movement, this.speed);
-
-        let objs!: GameObject[];
-
-        const speedToAdd = (this.speed / steps) * dt;
-        for (let i = 0; i < steps; i++) {
-            objs = this.game.grid.intersectCollider(this.collider);
-
-            v2.set(this.pos, v2.add(this.pos, v2.mul(movement, speedToAdd)));
-
-            for (let j = 0; j < objs.length; j++) {
-                const obj = objs[j];
-                if (obj.__type !== ObjectType.Obstacle) continue;
-                if (!obj.collidable) continue;
-                if (obj.dead) continue;
-                if (!util.sameLayer(obj.layer, this.layer)) continue;
-
-                const collision = collider.intersectCircle(
-                    obj.collider,
-                    this.pos,
-                    this.rad,
-                );
-                if (collision) {
-                    v2.set(
-                        this.pos,
-                        v2.add(this.pos, v2.mul(collision.dir, collision.pen + 0.001)),
-                    );
-                }
-            }
-        }
-
-        this.pickupTicker -= dt;
-
-        //
-        // Scope zoom, heal regions and and auto open doors logic
-        //
-
-        let finalZoom = this.scopeZoomRadius[this.scope];
-        let lowestZoom = this.scopeZoomRadius["1xscope"];
-
-        this.indoors = false;
-
-        let zoomRegionZoom = lowestZoom;
-        let insideNoZoomRegion = true;
-        let insideSmoke = false;
-
-        for (let i = 0; i < objs.length; i++) {
-            const obj = objs[i];
-            if (obj.__type === ObjectType.Building) {
-                if (
-                    !this.downed &&
-                    obj.healRegions &&
-                    util.sameLayer(this.layer, obj.layer)
-                ) {
-                    const healRegion = obj.healRegions.find((hr) => {
-                        return coldet.testPointAabb(
-                            this.pos,
-                            hr.collision.min,
-                            hr.collision.max,
-                        );
-                    });
-
-                    if (healRegion && !this.game.gas.isInGas(this.pos)) {
-                        this.health += healRegion.healRate * dt;
-                    }
-                }
-
-                if (obj.ceilingDead) continue;
-
-                // only check if layer is the same when not on stairs!
-                if (this.layer < 2 && this.layer !== obj.layer) continue;
-
-                for (let i = 0; i < obj.zoomRegions.length; i++) {
-                    const zoomRegion = obj.zoomRegions[i];
-
-                    if (
-                        zoomRegion.zoomIn &&
-                        coldet.testCircleAabb(
-                            this.collider.pos,
-                            this.collider.rad,
-                            zoomRegion.zoomIn.min,
-                            zoomRegion.zoomIn.max,
-                        )
-                    ) {
-                        this.indoors = true;
-                        this.insideZoomRegion = true;
-                        insideNoZoomRegion = false;
-                        if (zoomRegion.zoom) {
-                            zoomRegionZoom = zoomRegion.zoom;
-                        }
-                    }
-
-                    if (
-                        zoomRegion.zoomOut &&
-                        coldet.testCircleAabb(
-                            this.collider.pos,
-                            this.collider.rad,
-                            zoomRegion.zoomOut.min,
-                            zoomRegion.zoomOut.max,
-                        )
-                    ) {
-                        insideNoZoomRegion = false;
-                        if (this.insideZoomRegion) {
-                            if (zoomRegion.zoom) {
-                                zoomRegionZoom = zoomRegion.zoom;
-                            }
-                        }
-                    }
-                }
-            } else if (obj.__type === ObjectType.Obstacle) {
-                if (!util.sameLayer(this.layer, obj.layer)) continue;
-                if (!(obj.isDoor && obj.door.autoOpen)) continue;
-
-                const res = collider.intersectCircle(
-                    obj.collider,
-                    this.pos,
-                    this.rad + obj.interactionRad,
-                );
-                if (res) {
-                    obj.interact(this, true);
-                }
-            } else if (obj.__type === ObjectType.Smoke) {
-                if (!util.sameLayer(this.layer, obj.layer)) continue;
-                if (coldet.testCircleCircle(this.pos, this.rad, obj.pos, obj.rad)) {
-                    insideSmoke = true;
-                }
-            }
-        }
-
-        if (this.insideZoomRegion) {
-            finalZoom = zoomRegionZoom;
-        }
-        if (insideSmoke || this.downed) {
-            finalZoom = lowestZoom;
-        }
-        this.zoom = finalZoom;
-
-        if (insideNoZoomRegion) {
-            this.insideZoomRegion = false;
-        }
-
-        //
-        // Calculate layer
-        //
-        const originalLayer = this.layer;
-        const rot = Math.atan2(this.dir.y, this.dir.x);
-        const ori = math.radToOri(rot);
-        const stair = this.checkStairs(objs!, this.rad);
-        if (stair) {
-            if (ori === stair.downOri) {
-                this.aimLayer = 3;
-            } else if (ori === stair.upOri) {
-                this.aimLayer = 2;
+        if (closestPlayer != undefined && closestDist > 5 * GameConfig.player.reviveRange) {
+            if (closestPlayer.posOld.x > this.posOld.x) {
+                this.moveRight = true;
+                this.moveLeft = false;
             } else {
-                this.aimLayer = this.layer;
+                this.moveLeft = true;
+                this.moveRight = false;
             }
-        } else {
-            this.aimLayer = this.layer;
-        }
-        if (this.layer !== originalLayer) {
-            this.setDirty();
-
-            if (this.obstacleOutfit) {
-                this.obstacleOutfit.layer = this.layer;
-                this.obstacleOutfit.setDirty();
-            }
-        }
-
-        //
-        // Final position calculation: clamp to map bounds and set dirty if changed
-        //
-        this.game.map.clampToMapBounds(this.pos, this.rad);
-
-        if (!v2.eq(this.pos, this.posOld)) {
-            this.setPartDirty();
-            this.game.grid.updateObject(this);
-
-            //
-            // Halloween obstacle skin
-            //
-            if (this.obstacleOutfit) {
-                this.obstacleOutfit.pos = v2.copy(this.pos);
-                this.obstacleOutfit.updateCollider();
-                this.obstacleOutfit.setPartDirty();
+            // up - down
+            if (closestPlayer.posOld.y > this.posOld.y) {
+                this.moveUp = true;
+                this.moveDown = false;
+            } else {
+                this.moveDown = true;
+                this.moveUp = false;
             }
         }
 
-        //
-        // Downed logic
-        //
-        if (this.downed) {
-            this.distSinceLastCrawl += v2.distance(this.posOld, this.pos);
-
-            if (this.animType === GameConfig.Anim.None && this.distSinceLastCrawl > 3) {
-                let anim: number = GameConfig.Anim.CrawlForward;
-
-                if (!v2.eq(this.dir, movement, 1)) {
-                    anim = GameConfig.Anim.CrawlBackward;
-                }
-
-                this.playAnim(anim, GameConfig.player.crawlTime);
-                this.distSinceLastCrawl = 0;
-            }
-        }
-
-        //
-        // Weapon stuff
-        //
-        this.weaponManager.update(dt);
-
-        this.shotSlowdownTimer -= dt;
-        if (this.shotSlowdownTimer <= 0) {
-            this.shotSlowdownTimer = 0;
-        }
+        this.shootHold = false;
+        this.moveLeft = false;
     }
 
     msgStream = new net.MsgStream(new ArrayBuffer(65536));
-
-    handleInput(msg: net.InputMsg): void {
-        this.ack = msg.seq;
-
-        if (this.dead) return;
-
-        if (!v2.eq(this.dir, msg.toMouseDir)) {
-            this.setPartDirty();
-            this.dirOld = v2.copy(this.dir);
-            this.dir = v2.normalizeSafe(msg.toMouseDir);
-        }
-        this.shootHold = msg.shootHold;
-
-        this.moveLeft = msg.moveLeft;
-        this.moveRight = msg.moveRight;
-        this.moveUp = msg.moveUp;
-        this.moveDown = msg.moveDown;
-        this.portrait = msg.portrait;
-        this.touchMoveActive = msg.touchMoveActive;
-        this.touchMoveDir = v2.normalizeSafe(msg.touchMoveDir);
-        this.touchMoveLen = msg.touchMoveLen;
-
-        if (msg.shootStart) {
-            this.shootStart = true;
-        }
-        this.toMouseLen = msg.toMouseLen;
-
-        // HACK? client for some reason sends Interact followed by Cancel on mobile
-        // so we ignore the cancel request when reviving a player
-        let ignoreCancel = false;
-
-        for (let i = 0; i < msg.inputs.length; i++) {
-            const input = msg.inputs[i];
-            if (!this.shouldAcceptInput(input)) continue;
-            switch (input) {
-                case GameConfig.Input.StowWeapons:
-                case GameConfig.Input.EquipMelee:
-                    this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Melee);
-                    break;
-                case GameConfig.Input.EquipPrimary:
-                    this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary);
-                    break;
-                case GameConfig.Input.EquipSecondary:
-                    this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Secondary);
-                    break;
-                case GameConfig.Input.EquipThrowable:
-                    if (this.curWeapIdx === GameConfig.WeaponSlot.Throwable) {
-                        this.weaponManager.throwThrowable(true);
-                        this.weaponManager.showNextThrowable();
-                    } else {
-                        this.weaponManager.setCurWeapIndex(
-                            GameConfig.WeaponSlot.Throwable,
-                        );
-                    }
-                    break;
-                case GameConfig.Input.EquipPrevWeap:
-                case GameConfig.Input.EquipNextWeap:
-                    {
-                        function absMod(a: number, n: number): number {
-                            return a >= 0 ? a % n : ((a % n) + n) % n;
-                        }
-
-                        const toAdd = input === GameConfig.Input.EquipNextWeap ? 1 : -1;
-
-                        let iterations = 0;
-                        let idx = this.curWeapIdx;
-                        while (iterations < GameConfig.WeaponSlot.Count * 2) {
-                            idx = absMod(idx + toAdd, GameConfig.WeaponSlot.Count);
-                            if (this.weapons[idx].type) {
-                                break;
-                            }
-                        }
-                        this.weaponManager.setCurWeapIndex(idx);
-                    }
-                    break;
-                case GameConfig.Input.EquipLastWeap:
-                    this.weaponManager.setCurWeapIndex(this.weaponManager.lastWeaponIdx);
-                    break;
-                case GameConfig.Input.EquipOtherGun:
-                    if (
-                        this.curWeapIdx == GameConfig.WeaponSlot.Primary ||
-                        this.curWeapIdx == GameConfig.WeaponSlot.Secondary
-                    ) {
-                        const otherGunSlotIdx = this.curWeapIdx ^ 1;
-                        const isOtherGunSlotFull: number =
-                            +!!this.weapons[otherGunSlotIdx].type; //! ! converts string to boolean, + coerces boolean to number
-                        this.weaponManager.setCurWeapIndex(
-                            isOtherGunSlotFull
-                                ? otherGunSlotIdx
-                                : GameConfig.WeaponSlot.Melee,
-                        );
-                    } else if (
-                        this.curWeapIdx == GameConfig.WeaponSlot.Melee &&
-                        (this.weapons[GameConfig.WeaponSlot.Primary].type ||
-                            this.weapons[GameConfig.WeaponSlot.Secondary].type)
-                    ) {
-                        this.weaponManager.setCurWeapIndex(
-                            +!this.weapons[GameConfig.WeaponSlot.Primary].type,
-                        );
-                    } else if (this.curWeapIdx == GameConfig.WeaponSlot.Throwable) {
-                        const bothSlotsEmpty =
-                            !this.weapons[GameConfig.WeaponSlot.Primary].type &&
-                            !this.weapons[GameConfig.WeaponSlot.Secondary].type;
-                        if (bothSlotsEmpty) {
-                            this.weaponManager.setCurWeapIndex(
-                                GameConfig.WeaponSlot.Melee,
-                            );
-                        } else {
-                            const index = this.weapons[GameConfig.WeaponSlot.Primary].type
-                                ? GameConfig.WeaponSlot.Primary
-                                : GameConfig.WeaponSlot.Secondary;
-                            this.weaponManager.setCurWeapIndex(index);
-                        }
-                    }
-
-                    break;
-                case GameConfig.Input.Interact: {
-                    const loot = this.getClosestLoot();
-                    const obstacles = this.getInteractableObstacles();
-                    const playerToRevive = this.getPlayerToRevive();
-
-                    const interactables = [loot, ...obstacles, playerToRevive];
-
-                    for (let i = 0; i < interactables.length; i++) {
-                        const interactable = interactables[i];
-                        if (!interactable) continue;
-                        if (interactable.__type === ObjectType.Player) {
-                            this.revive(playerToRevive);
-                            ignoreCancel = true;
-                        } else {
-                            this.interactWith(interactable);
-                        }
-                    }
-                    break;
-                }
-                case GameConfig.Input.Loot: {
-                    const loot = this.getClosestLoot();
-                    if (loot) {
-                        this.interactWith(loot);
-                    }
-                    break;
-                }
-                case GameConfig.Input.Use: {
-                    const obstacles = this.getInteractableObstacles();
-                    for (let i = 0; i < obstacles.length; i++) {
-                        obstacles[i].interact(this);
-                    }
-                    break;
-                }
-                case GameConfig.Input.Reload:
-                    this.weaponManager.tryReload();
-                    break;
-                case GameConfig.Input.Cancel:
-                    if (ignoreCancel) {
-                        break;
-                    }
-                    this.cancelAction();
-                    break;
-                case GameConfig.Input.EquipNextScope: {
-                    const scopeIdx = SCOPE_LEVELS.indexOf(this.scope);
-
-                    for (let i = scopeIdx + 1; i < SCOPE_LEVELS.length; i++) {
-                        const nextScope = SCOPE_LEVELS[i];
-
-                        if (!this.inventory[nextScope]) continue;
-                        this.scope = nextScope;
-                        this.inventoryDirty = true;
-                        break;
-                    }
-                    break;
-                }
-                case GameConfig.Input.EquipPrevScope: {
-                    const scopeIdx = SCOPE_LEVELS.indexOf(this.scope);
-
-                    for (let i = scopeIdx - 1; i >= 0; i--) {
-                        const prevScope = SCOPE_LEVELS[i];
-
-                        if (!this.inventory[prevScope]) continue;
-                        this.scope = prevScope;
-                        this.inventoryDirty = true;
-                        break;
-                    }
-                    break;
-                }
-                case GameConfig.Input.SwapWeapSlots: {
-                    const primary = {
-                        ...this.weapons[GameConfig.WeaponSlot.Primary],
-                    };
-                    const secondary = {
-                        ...this.weapons[GameConfig.WeaponSlot.Secondary],
-                    };
-
-                    this.weapons[GameConfig.WeaponSlot.Primary] = secondary;
-                    this.weapons[GameConfig.WeaponSlot.Secondary] = primary;
-
-                    // curWeapIdx's setter method already sets dirty.weapons
-                    if (
-                        this.curWeapIdx == GameConfig.WeaponSlot.Primary ||
-                        this.curWeapIdx == GameConfig.WeaponSlot.Secondary
-                    ) {
-                        this.weaponManager.setCurWeapIndex(
-                            this.curWeapIdx ^ 1,
-                            false,
-                            false,
-                        );
-                    } else {
-                        this.weapsDirty = true;
-                    }
-                    break;
-                }
-                case GameConfig.Input.Revive: {
-                    const playerToRevive = this.getPlayerToRevive();
-                    this.revive(playerToRevive);
-                }
-            }
-        }
-
-        // hacky hack to figure out the crash!!
-        if (!this.activeWeapon) {
-            console.error(
-                "InputMsg: invalid active weapon, curIdx:",
-                this.curWeapIdx,
-                "lastIdx:",
-                this.weaponManager.lastWeaponIdx,
-                "weaps:",
-                this.weapons,
-                "inputs:",
-                msg.inputs.map((input) => GameConfig.Input[input]).join(", "),
-            );
-            this.weapons[GameConfig.WeaponSlot.Melee].type ||= "fists";
-            this.weaponManager.setCurWeapIndex(
-                GameConfig.WeaponSlot.Melee,
-                undefined,
-                undefined,
-                true,
-            );
-        }
-
-        // no exceptions for any perks or roles
-        if (this.downed) return;
-
-        switch (msg.useItem) {
-            case "bandage":
-            case "healthkit":
-                this.useHealingItem(msg.useItem);
-                break;
-            case "soda":
-            case "painkiller":
-                this.useBoostItem(msg.useItem);
-                break;
-            case "1xscope":
-            case "2xscope":
-            case "4xscope":
-            case "8xscope":
-            case "15xscope":
-                if (this.inventory[msg.useItem]) {
-                    this.scope = msg.useItem;
-                    this.inventoryDirty = true;
-                }
-                break;
-        }
-    }
 
     // only thing using socketId
     sendData(buffer: ArrayBuffer | Uint8Array): void {
