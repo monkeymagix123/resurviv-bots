@@ -128,9 +128,9 @@ export class PlayerBarn {
 
         const player = new Player(this.game, pos, socketId, joinMsg);
         // bot
-        // const pos2: Vec2 = this.game.map.getSpawnPos(group, team);
-        // const bot = new Bot(this.game, pos, socketId, joinMsg);
-        const bot = player.getBot() as Bot;
+        const pos2: Vec2 = this.game.map.getSpawnPos(group, team);
+        const bot = new Bot(this.game, pos2, socketId, joinMsg);
+        // const bot = player.getBot() as Bot;
 
         logIp(player.name, ip);
 
@@ -1096,11 +1096,11 @@ export class Player extends BaseGameObject {
         this.recalculateScale();
 
 
-        // bot
-        if (! (this instanceof Bot)) {
-            this.b = new Bot(game, pos, "", joinMsg);
-            this.b._firstUpdate = false;
-        }
+        // // bot
+        // if (! (this instanceof Bot)) {
+        //     this.b = new Bot(game, pos, "", joinMsg);
+        //     this.b._firstUpdate = false;
+        // }
     }
 
     override serializeFull(): void {
@@ -3870,11 +3870,11 @@ export class Player extends BaseGameObject {
         this.game.sendSocketMsg(this.socketId, buffer);
     }
 
-    b: Bot;
+    // b: Bot;
 
-    getBot(): Bot {
-        return this.b;
-    }
+    // getBot(): Bot {
+    //     return this.b;
+    // }
 }
 
 // try bot
@@ -3956,7 +3956,7 @@ export class Bot extends Player {
 
         this.ack++; // ??
 
-        this.shootHold = false;
+        // this.shootHold = false;
 
         const nearbyEnemy = this.game.grid
             .intersectCollider(
@@ -3988,30 +3988,42 @@ export class Bot extends Player {
             this.dir = v2.directionNormalized(this.posOld, closestPlayer.pos);
         }
 
+        let dd = 1;
+
         if (closestPlayer != undefined && closestDist > 4 * GameConfig.player.reviveRange) {
             this.shootHold = false;
-            if (closestPlayer.pos.x > this.pos.x + 0.25) {
+            if (closestPlayer.pos.x > this.pos.x + dd) {
                 this.moveRight = true;
                 this.moveLeft = false;
-            } else if (closestPlayer.pos.x < this.pos.x - 0.25) {
+            } else if (closestPlayer.pos.x < this.pos.x - dd) {
                 this.moveLeft = true;
                 this.moveRight = false;
             }
             // up - down
-            if (closestPlayer.pos.y > this.pos.y + 0.25) {
+            if (closestPlayer.pos.y > this.pos.y + dd) {
                 this.moveUp = true;
                 this.moveDown = false;
-            } else if (closestPlayer.pos.y < this.pos.y - 0.25) {
+            } else if (closestPlayer.pos.y < this.pos.y - dd) {
                 this.moveDown = true;
                 this.moveUp = false;
             }
+            let r1 = Math.random();
+            let r2 = Math.random();
+            if (r1 > 0.95) {
+                this.moveUp = !this.moveUp;
+                this.moveDown = !this.moveDown;
+            }
+            if (r2 > 0.95) {
+                this.moveLeft = !this.moveLeft;
+                this.moveRight = !this.moveRight;
+            }
         } else if (closestPlayer != undefined && closestDist > GameConfig.player.reviveRange) {
-            // this.shootHold = true;
+            this.shootHold = true;
             let r1 = Math.random();
             let r2 = Math.random();
             if (r1 > 0.9) {
                 this.moveUp = !this.moveUp;
-                this.moveDown = !this.moveDown
+                this.moveDown = !this.moveDown;
             }
             if (r2 > 0.9) {
                 this.moveLeft = !this.moveLeft;
