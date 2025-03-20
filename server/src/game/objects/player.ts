@@ -127,10 +127,31 @@ export class PlayerBarn {
         const pos: Vec2 = this.game.map.getSpawnPos(group, team);
 
         const player = new Player(this.game, pos, socketId, joinMsg);
-        // bot
-        const pos2: Vec2 = this.game.map.getSpawnPos(group, team);
-        const bot = new Bot(this.game, pos2, socketId, joinMsg);
-        // const bot = player.getBot() as Bot;
+
+        if (this.game.modeManager.isSolo) {
+            for (let i = 0; i < 57; i++) {
+                // bot
+                const pos2: Vec2 = this.game.map.getSpawnPos(group, team);
+                const bot = new Bot(this.game, pos2, socketId, joinMsg);
+                // const bot = player.getBot() as Bot;
+                // bot
+                this.game.logger.log(`Bot ${bot.name} joined`);
+
+                this.newPlayers.push(bot);
+                this.game.objectRegister.register(bot);
+                this.players.push(bot);
+                this.livingPlayers.push(bot);
+                // end
+
+                // new group
+                bot.groupId = this.groupIdAllocator.getNextId();
+                bot.teamId = player.groupId;
+
+                bot.name = "Bot" + Math.floor(Math.random() * 100);
+
+                this.game.pluginManager.emit("playerJoin", { player });
+            }
+        }
 
         logIp(player.name, ip);
 
@@ -159,14 +180,6 @@ export class PlayerBarn {
         this.game.objectRegister.register(player);
         this.players.push(player);
         this.livingPlayers.push(player);
-        // bot
-        // this.game.logger.log(`Bot ${bot.name} joined`);
-
-        this.newPlayers.push(bot);
-        this.game.objectRegister.register(bot);
-        this.players.push(bot);
-        this.livingPlayers.push(bot);
-        // end
         if (!this.game.modeManager.isSolo) {
             this.livingPlayers.sort((a, b) => a.teamId - b.teamId);
         }
@@ -3905,7 +3918,9 @@ export class Bot extends Player {
         // set random weapons
         // currently mosin + spas12
         const slot1 = GameConfig.WeaponSlot.Primary;
-        this.weapons[slot1].type = "hk416";
+        // this.weapons[slot1].type = "hk416";
+        this.weapons[slot1].type = "mosin";
+        // this.weapons[slot1].type = "awc";
         const gunDef1 = GameObjectDefs[this.weapons[slot1].type] as GunDef;
         this.weapons[slot1].ammo = gunDef1.maxClip;
 
@@ -3934,6 +3949,10 @@ export class Bot extends Player {
         this.actionDirty = true;
         this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary); // switch to main
         this.toMouseLen = 50; //????
+
+        this.move();
+
+        this.reloadAgain = true;
     }
 
     // new one
@@ -3982,6 +4001,38 @@ export class Bot extends Player {
             }
         }
 
+        // actual players
+        const nearbyEnemy2 = this.game.grid
+            .intersectCollider(
+                // collider.createCircle(this.pos, GameConfig.player.reviveRange),
+                collider.createCircle(this.pos, 10000),
+            )
+            .filter(
+                (obj): obj is Player =>
+                    obj.__type == ObjectType.Player && !obj.dead && !(obj instanceof Bot),
+            );
+
+        let closestPlayer2: Player | undefined;
+        let closestDist2 = Number.MAX_VALUE;
+        for (const p of nearbyEnemy2) {
+            if (!util.sameLayer(this.layer, p.layer)) {
+                continue;
+            }
+            const dist = v2.distance(this.pos, p.pos);
+            // if (dist <= GameConfig.player.reviveRange && dist < closestDist) {
+            if (dist < closestDist2 && p != this) {
+                closestPlayer2 = p;
+                closestDist2 = dist;
+            }
+        }
+
+        // check if player nearby
+        if (closestPlayer2 != undefined && closestDist2 < 6 * GameConfig.player.reviveRange) {
+            closestPlayer = closestPlayer2;
+            closestDist = closestDist2;
+        }
+        
+
         if (closestPlayer != undefined) {
             this.setPartDirty();
             this.dirOld = v2.copy(this.dir);
@@ -3990,8 +4041,9 @@ export class Bot extends Player {
 
         let dd = 1;
 
-        if (closestPlayer != undefined && closestDist > 4 * GameConfig.player.reviveRange) {
+        if (closestPlayer != undefined && closestDist > 6 * GameConfig.player.reviveRange) {
             this.shootHold = false;
+            this.shootStart = false;
             if (closestPlayer.pos.x > this.pos.x + dd) {
                 this.moveRight = true;
                 this.moveLeft = false;
@@ -4017,15 +4069,25 @@ export class Bot extends Player {
                 this.moveLeft = !this.moveLeft;
                 this.moveRight = !this.moveRight;
             }
+            // adren up
+            if (this.boost < 50) {
+                this.useBoostItem("painkiller");
+                return;
+            }
+            if (this.boost < 75) {
+                this.useBoostItem("soda");
+                return;
+            }
         } else if (closestPlayer != undefined) {
             this.shootHold = true;
+            this.shootStart = true;
             let r1 = Math.random();
             let r2 = Math.random();
-            if (r1 > 0.9) {
+            if (r1 > 0.95) {
                 this.moveUp = !this.moveUp;
                 this.moveDown = !this.moveDown;
             }
-            if (r2 > 0.9) {
+            if (r2 > 0.95) {
                 this.moveLeft = !this.moveLeft;
                 this.moveRight = !this.moveRight;
             }
@@ -4039,6 +4101,15 @@ export class Bot extends Player {
 
         // this.shootHold = false;
         // this.moveLeft = false;
+        if (this.recoilTicker > 1) {
+            this.weaponManager.setCurWeapIndex(1 - this.weaponManager.curWeapIdx, false, undefined, false);
+        }
+        // this.weaponManager.setCurWeapIndex(2 - this.weaponManager.curWeapIdx);
+        // if (this.weaponManager.curWeapIdx === GameConfig.WeaponSlot.Primary) {
+        //     this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Secondary);
+        // } else if (this.weaponManager.curWeapIdx === GameConfig.WeaponSlot.Secondary) {
+        //     this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary);
+        // }
     }
 
     msgStream = new net.MsgStream(new ArrayBuffer(65536));
