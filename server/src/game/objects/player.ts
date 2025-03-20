@@ -129,10 +129,15 @@ export class PlayerBarn {
         const player = new Player(this.game, pos, socketId, joinMsg);
 
         if (this.game.modeManager.isSolo) {
-            for (let i = 0; i < 57; i++) {
+            for (let i = 0; i < 17; i++) {
                 // bot
                 const pos2: Vec2 = this.game.map.getSpawnPos(group, team);
-                const bot = new Bot(this.game, pos2, socketId, joinMsg);
+                let r = Math.random();
+                const bot = new DumBot(this.game, pos2, socketId, joinMsg);
+                if (r < 0.1) {
+                    const bot = new Bot(this.game, pos2, socketId, joinMsg);
+                }
+                
                 // const bot = player.getBot() as Bot;
                 // bot
                 this.game.logger.log(`Bot ${bot.name} joined`);
@@ -143,9 +148,9 @@ export class PlayerBarn {
                 this.livingPlayers.push(bot);
                 // end
 
-                // new group
-                bot.groupId = this.groupIdAllocator.getNextId();
-                bot.teamId = player.groupId;
+                // // new group
+                // bot.groupId = this.groupIdAllocator.getNextId();
+                // bot.teamId = player.groupId;
 
                 bot.name = "Bot" + Math.floor(Math.random() * 100);
 
@@ -3954,7 +3959,7 @@ export class Bot extends Player {
 
         this.reloadAgain = true;
 
-        this.shotSlowdownTimer = 10; // spawn delay
+        this.shotSlowdownTimer = 6; // spawn delay
     }
 
     // new one
@@ -4148,6 +4153,164 @@ export class Bot extends Player {
         // } else if (this.weaponManager.curWeapIdx === GameConfig.WeaponSlot.Secondary) {
         //     this.weaponManager.setCurWeapIndex(GameConfig.WeaponSlot.Primary);
         // }
+    }
+
+    msgStream = new net.MsgStream(new ArrayBuffer(65536));
+
+    // stuff in view:
+    // const radius = player.zoom + 4;
+    //     const rect = coldet.circleToAabb(player.pos, radius);
+
+    //     const newVisibleObjects = game.grid.intersectColliderSet(rect);
+    //     // client crashes if active player is not visible
+    //     // so make sure its always added to visible objects
+    //     newVisibleObjects.add(this);
+
+    //     for (const obj of this.visibleObjects) {
+    //         if (!newVisibleObjects.has(obj)) {
+    //             updateMsg.delObjIds.push(obj.__id);
+    //         }
+    //     }
+
+    // only thing using socketId
+    sendData(buffer: ArrayBuffer | Uint8Array): void {
+        // this.game.sendSocketMsg(this.socketId, buffer);
+        this.move();
+    }
+}
+
+// simple assault rifle
+export class DumBot extends Bot {
+    // test
+    constructor(game: Game, pos: Vec2, socketId: string, joinMsg: net.JoinMsg) {
+        // super(game, pos, socketId, joinMsg);
+        super(game, pos, socketId, joinMsg);
+
+        const slot1 = GameConfig.WeaponSlot.Primary;
+        let stuff: string[] = ["hk416", "mp220", "mp5", "vector", "scar", "m39", "mk12", "famas", "m9", "m1100", "m870", "ak47"];
+        // this.weapons[slot1].type = "hk416";
+        // this.weapons[slot1].type = "mosin";
+        // this.weapons[slot1].type = "awc";
+        let r = Math.floor(Math.random() * stuff.length);
+        this.weapons[slot1].type = stuff[r];
+        const gunDef1 = GameObjectDefs[this.weapons[slot1].type] as GunDef;
+        this.weapons[slot1].ammo = gunDef1.maxClip;
+    }
+
+    // new one
+    move(): void {
+        if (this.shotSlowdownTimer > 2) {
+            return;
+        }
+
+        this.ack++; // ??
+
+        const nearbyEnemy = this.game.grid
+            .intersectCollider(
+                // collider.createCircle(this.pos, GameConfig.player.reviveRange),
+                collider.createCircle(this.pos, 10000),
+            )
+            .filter(
+                (obj): obj is Player =>
+                    obj.__type == ObjectType.Player && !obj.dead,
+            );
+
+        let closestPlayer: Player | undefined;
+        let closestDist = Number.MAX_VALUE;
+        for (const p of nearbyEnemy) {
+            if (!util.sameLayer(this.layer, p.layer)) {
+                continue;
+            }
+            const dist = v2.distance(this.pos, p.pos);
+            // if (dist <= GameConfig.player.reviveRange && dist < closestDist) {
+            if (dist < closestDist && p != this) {
+                closestPlayer = p;
+                closestDist = dist;
+            }
+        }
+
+        // actual players
+        const nearbyEnemy2 = this.game.grid
+            .intersectCollider(
+                // collider.createCircle(this.pos, GameConfig.player.reviveRange),
+                collider.createCircle(this.pos, 10000),
+            )
+            .filter(
+                (obj): obj is Player =>
+                    obj.__type == ObjectType.Player && !obj.dead && !(obj instanceof Bot),
+            );
+
+        let closestPlayer2: Player | undefined;
+        let closestDist2 = Number.MAX_VALUE;
+        for (const p of nearbyEnemy2) {
+            if (!util.sameLayer(this.layer, p.layer)) {
+                continue;
+            }
+            const dist = v2.distance(this.pos, p.pos);
+            // if (dist <= GameConfig.player.reviveRange && dist < closestDist) {
+            if (dist < closestDist2 && p != this) {
+                closestPlayer2 = p;
+                closestDist2 = dist;
+            }
+        }
+
+        // check if player nearby
+        if (closestPlayer2 != undefined && closestDist2 < 6 * GameConfig.player.reviveRange) {
+            closestPlayer = closestPlayer2;
+            closestDist = closestDist2;
+        }
+        
+
+        if (closestPlayer != undefined) {
+            this.setPartDirty();
+            this.dirOld = v2.copy(this.dir);
+            this.dir = v2.directionNormalized(this.posOld, closestPlayer.pos);
+        }
+
+        let dd = 1;
+
+        if (closestPlayer != undefined && closestDist > 6 * GameConfig.player.reviveRange) {
+            this.shootHold = false;
+            this.shootStart = false;
+            if (closestPlayer.pos.x > this.pos.x + dd) {
+                this.moveRight = true;
+                this.moveLeft = false;
+            } else if (closestPlayer.pos.x < this.pos.x - dd) {
+                this.moveLeft = true;
+                this.moveRight = false;
+            }
+            // up - down
+            if (closestPlayer.pos.y > this.pos.y + dd) {
+                this.moveUp = true;
+                this.moveDown = false;
+            } else if (closestPlayer.pos.y < this.pos.y - dd) {
+                this.moveDown = true;
+                this.moveUp = false;
+            }
+            let r1 = Math.random();
+            let r2 = Math.random();
+            if (r1 > 0.7) {
+                this.moveUp = !this.moveUp;
+                this.moveDown = !this.moveDown;
+            }
+            if (r2 > 0.7) {
+                this.moveLeft = !this.moveLeft;
+                this.moveRight = !this.moveRight;
+            }
+        } else if (closestPlayer != undefined) {
+            this.shootHold = true;
+            this.shootStart = true;
+            let r1 = Math.random();
+            let r2 = Math.random();
+            if (r1 > 0.95) {
+                this.moveUp = !this.moveUp;
+                this.moveDown = !this.moveDown;
+            }
+            if (r2 > 0.95) {
+                this.moveLeft = !this.moveLeft;
+                this.moveRight = !this.moveRight;
+            }
+        }
     }
 
     msgStream = new net.MsgStream(new ArrayBuffer(65536));
