@@ -3953,10 +3953,15 @@ export class Bot extends Player {
         this.move();
 
         this.reloadAgain = true;
+
+        this.shotSlowdownTimer = 10; // spawn delay
     }
 
     // new one
     move(): void {
+        if (this.shotSlowdownTimer > 2) {
+            return;
+        }
         // stuff
         // let hoh = new net.InputMsg();
         // hoh.moveLeft = true;
@@ -4069,13 +4074,45 @@ export class Bot extends Player {
                 this.moveLeft = !this.moveLeft;
                 this.moveRight = !this.moveRight;
             }
-            // adren up
-            if (this.boost < 50) {
+            // heal up
+            if (this._health < 50 && this.actionItem != "bandage") {
+                if (r1 < 0.7) {
+                    this.moveUp = !this.moveUp;
+                    this.moveDown = !this.moveDown;
+                }
+                // if (r2 < 0.7) {
+                //     this.moveLeft = !this.moveLeft;
+                //     this.moveRight = !this.moveRight;
+                // }
+                // this.cancelAction();
+                this.useHealingItem("bandage");
+                return;
+            }
+            // adren up, run away
+            if (this._boost < 50 && this.actionItem != "painkiller") {
+                if (r1 < 0.7) {
+                    this.moveUp = !this.moveUp;
+                    this.moveDown = !this.moveDown;
+                }
+                // if (r2 < 0.95) {
+                //     this.moveLeft = !this.moveLeft;
+                //     this.moveRight = !this.moveRight;
+                // }
+                // this.cancelAction();
                 this.useBoostItem("painkiller");
                 return;
             }
-            if (this.boost < 75) {
+            if (this._boost < 75 && this.actionItem != "soda") {
+                // this.cancelAction();
                 this.useBoostItem("soda");
+                if (r1 < 0.7) {
+                    this.moveUp = !this.moveUp;
+                    this.moveDown = !this.moveDown;
+                }
+                // if (r2 < 0.95) {
+                //     this.moveLeft = !this.moveLeft;
+                //     this.moveRight = !this.moveRight;
+                // }
                 return;
             }
         } else if (closestPlayer != undefined) {
@@ -4101,8 +4138,9 @@ export class Bot extends Player {
 
         // this.shootHold = false;
         // this.moveLeft = false;
-        if (this.recoilTicker > 1) {
-            this.weaponManager.setCurWeapIndex(1 - this.weaponManager.curWeapIdx, false, undefined, false);
+        const curWeap = GameObjectDefs[this.weaponManager.activeWeapon] as GunDef;
+        if (this.shotSlowdownTimer > 0 && curWeap.fireDelay - this.shotSlowdownTimer > 0.25) {
+            this.weaponManager.setCurWeapIndex(1 - this.weaponManager.curWeapIdx);
         }
         // this.weaponManager.setCurWeapIndex(2 - this.weaponManager.curWeapIdx);
         // if (this.weaponManager.curWeapIdx === GameConfig.WeaponSlot.Primary) {
