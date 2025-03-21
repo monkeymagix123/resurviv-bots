@@ -37,12 +37,16 @@ import { IDAllocator } from "../../utils/IDAllocator";
 import { logIp } from "../../utils/ipLogging";
 import { checkForBadWords } from "../../utils/serverHelpers";
 import type { Game, JoinTokenData } from "../game";
+import { GameModeManager } from "../gameModeManager";
 import { Group } from "../group";
 import { Team } from "../team";
 import { WeaponManager, throwableList } from "../weaponManager";
 import { BaseGameObject, type DamageParams, type GameObject } from "./gameObject";
 import type { Loot } from "./loot";
 import type { Obstacle } from "./obstacle";
+
+// // import { GameMode } from "../gameModeManager";
+// import { TeamMode } from "../../../../shared/gameConfig";
 
 export interface Emote {
     playerId: number;
@@ -127,7 +131,6 @@ export class PlayerBarn {
         if (this.game.modeManager.isSolo) {
             // player diff
             let hash = "a";
-            this.groupIdAllocator.getNextId()
             if (this.groupsByHash.has(hash)) {
                 group = this.groupsByHash.get(hash);
             } else {
@@ -145,7 +148,7 @@ export class PlayerBarn {
         const player = new Player(this.game, pos, socketId, joinMsg);
 
         if (this.game.modeManager.isSolo) {
-            let n = 57; // 17;
+            let n = 17; // 17;
             for (let i = 0; i < n; i++) {
                 // bot
                 const pos2: Vec2 = this.game.map.getSpawnPos();
@@ -166,8 +169,15 @@ export class PlayerBarn {
                 // end
 
                 // new group
-                bot.groupId = this.groupIdAllocator.getNextId();
-                bot.teamId = player.groupId;
+                let group = this.addGroup(false);
+
+                // bot.groupId = this.groupIdAllocator.getNextId();
+                this.groups.push(group);
+                this.groupsByHash.set(group.hash, group);
+
+                bot.groupId = group.groupId;
+
+                bot.teamId = bot.groupId;
 
                 bot.name = "Bot" + Math.floor(Math.random() * 100);
 
