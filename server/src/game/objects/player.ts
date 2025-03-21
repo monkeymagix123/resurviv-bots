@@ -129,13 +129,15 @@ export class PlayerBarn {
         const player = new Player(this.game, pos, socketId, joinMsg);
 
         if (this.game.modeManager.isSolo) {
+            // player diff
+            player.groupId = 10;
             for (let i = 0; i < 17; i++) {
                 // bot
                 const pos2: Vec2 = this.game.map.getSpawnPos(group, team);
                 let r = Math.random();
-                const bot = new DumBot(this.game, pos2, socketId, joinMsg);
+                let bot = new DumBot(this.game, pos2, socketId, joinMsg);
                 if (r < 0.1) {
-                    const bot = new Bot(this.game, pos2, socketId, joinMsg);
+                    bot = new Bot(this.game, pos2, socketId, joinMsg);
                 }
                 
                 // const bot = player.getBot() as Bot;
@@ -172,7 +174,7 @@ export class PlayerBarn {
             team.addPlayer(player);
             player.groupId = this.groupIdAllocator.getNextId();
         } else {
-            player.groupId = this.groupIdAllocator.getNextId();
+            // player.groupId = this.groupIdAllocator.getNextId();
             player.teamId = player.groupId;
         }
         if (player.game.map.factionMode) {
@@ -4012,10 +4014,25 @@ export class Bot extends Player {
         }
 
         // actual players
+        // diff zone?
+        const radius = this.zoom + 4;
+        const rect = coldet.circleToAabb(this.pos, radius * 0.8); // a bit less
+
+    //     const newVisibleObjects = game.grid.intersectColliderSet(rect);
+    //     // client crashes if active player is not visible
+    //     // so make sure its always added to visible objects
+    //     newVisibleObjects.add(this);
+
+    //     for (const obj of this.visibleObjects) {
+    //         if (!newVisibleObjects.has(obj)) {
+    //             updateMsg.delObjIds.push(obj.__id);
+    //         }
+    //     }
         const nearbyEnemy2 = this.game.grid
             .intersectCollider(
                 // collider.createCircle(this.pos, GameConfig.player.reviveRange),
-                collider.createCircle(this.pos, 10000),
+                // collider.createCircle(this.pos, 10000),
+                rect,
             )
             .filter(
                 (obj): obj is Player =>
@@ -4187,7 +4204,8 @@ export class DumBot extends Bot {
         super(game, pos, socketId, joinMsg);
 
         const slot1 = GameConfig.WeaponSlot.Primary;
-        let stuff: string[] = ["hk416", "mp220", "mp5", "vector", "scar", "m39", "mk12", "famas", "m9", "m1100", "m870", "ak47"];
+        // let stuff: string[] = ["hk416", "mp220", "mp5", "vector", "scar", "m39", "mk12", "famas", "m9", "m1100", "m870", "ak47"];
+        let stuff: string[] = ["hk416", "mp220", "mp5", "vector", "scar", "m39", "mk12", "famas", "m9", "m1100", "m870", "ak47", "awc", "usas"];
         // this.weapons[slot1].type = "hk416";
         // this.weapons[slot1].type = "mosin";
         // this.weapons[slot1].type = "awc";
@@ -4230,10 +4248,14 @@ export class DumBot extends Bot {
         }
 
         // actual players
+        // diff zone?
+        const radius = this.zoom + 4;
+        const rect = coldet.circleToAabb(this.pos, radius * 0.8); // a bit less
         const nearbyEnemy2 = this.game.grid
             .intersectCollider(
                 // collider.createCircle(this.pos, GameConfig.player.reviveRange),
-                collider.createCircle(this.pos, 10000),
+                // collider.createCircle(this.pos, 10000),
+                rect,
             )
             .filter(
                 (obj): obj is Player =>
