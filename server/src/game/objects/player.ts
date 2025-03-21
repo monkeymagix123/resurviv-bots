@@ -124,15 +124,8 @@ export class PlayerBarn {
             assert(group);
         }
 
-        const pos: Vec2 = this.game.map.getSpawnPos(group, team);
-
-        const player = new Player(this.game, pos, socketId, joinMsg);
-
         if (this.game.modeManager.isSolo) {
             // player diff
-            // player.groupId = 10;
-            // player.groupId = 11090;
-            // group = new Group("a", 10, false, 100);
             let hash = "a";
             this.groupIdAllocator.getNextId()
             if (this.groupsByHash.has(hash)) {
@@ -145,8 +138,13 @@ export class PlayerBarn {
             }
             assert(group);
             // player.groupId = group.groupId;
+        }
 
+        const pos: Vec2 = this.game.map.getSpawnPos(group, team);
 
+        const player = new Player(this.game, pos, socketId, joinMsg);
+
+        if (this.game.modeManager.isSolo) {
             let n = 57; // 17;
             for (let i = 0; i < n; i++) {
                 // bot
