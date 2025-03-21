@@ -130,10 +130,27 @@ export class PlayerBarn {
 
         if (this.game.modeManager.isSolo) {
             // player diff
-            player.groupId = 10;
-            for (let i = 0; i < 17; i++) {
+            // player.groupId = 10;
+            // player.groupId = 11090;
+            // group = new Group("a", 10, false, 100);
+            let hash = "a";
+            this.groupIdAllocator.getNextId()
+            if (this.groupsByHash.has(hash)) {
+                group = this.groupsByHash.get(hash);
+            } else {
+                let id = this.groupIdAllocator.getNextId();
+                group = new Group(hash, id, false, 100);
+                this.groups.push(group);
+                this.groupsByHash.set(hash, group);
+            }
+            assert(group);
+            // player.groupId = group.groupId;
+
+
+            let n = 57; // 17;
+            for (let i = 0; i < n; i++) {
                 // bot
-                const pos2: Vec2 = this.game.map.getSpawnPos(group, team);
+                const pos2: Vec2 = this.game.map.getSpawnPos();
                 let r = Math.random();
                 let bot = new DumBot(this.game, pos2, socketId, joinMsg);
                 if (r < 0.1) {
@@ -150,9 +167,9 @@ export class PlayerBarn {
                 this.livingPlayers.push(bot);
                 // end
 
-                // // new group
-                // bot.groupId = this.groupIdAllocator.getNextId();
-                // bot.teamId = player.groupId;
+                // new group
+                bot.groupId = this.groupIdAllocator.getNextId();
+                bot.teamId = player.groupId;
 
                 bot.name = "Bot" + Math.floor(Math.random() * 100);
 
@@ -174,7 +191,7 @@ export class PlayerBarn {
             team.addPlayer(player);
             player.groupId = this.groupIdAllocator.getNextId();
         } else {
-            // player.groupId = this.groupIdAllocator.getNextId();
+            player.groupId = this.groupIdAllocator.getNextId();
             player.teamId = player.groupId;
         }
         if (player.game.map.factionMode) {
@@ -4204,8 +4221,9 @@ export class DumBot extends Bot {
         super(game, pos, socketId, joinMsg);
 
         const slot1 = GameConfig.WeaponSlot.Primary;
-        // let stuff: string[] = ["hk416", "mp220", "mp5", "vector", "scar", "m39", "mk12", "famas", "m9", "m1100", "m870", "ak47"];
-        let stuff: string[] = ["hk416", "mp220", "mp5", "vector", "scar", "m39", "mk12", "famas", "m9", "m1100", "m870", "ak47", "awc", "usas"];
+        let stuff: string[] = ["hk416", "mp220", "mp5", "vector", "scar", "m39", "mk12", "famas", "m9", "m1100", "m870", "ak47"];
+        // let stuff: string[] = ["hk416", "mp220", "mp5", "vector", "scar", "m39", "mk12", "famas", "m9", "m1100", "m870", "ak47", "awc", "usas"];
+        // let stuff: string[] = ["usas", "awc", "pkp"];
         // this.weapons[slot1].type = "hk416";
         // this.weapons[slot1].type = "mosin";
         // this.weapons[slot1].type = "awc";
